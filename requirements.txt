@@ -1,2 +1,3 @@
 django-chartjs
 django-crispy-forms
+django-bootstrap4
