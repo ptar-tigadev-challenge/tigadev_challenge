@@ -23,9 +23,11 @@ class ParametersForm(forms.Form):
     campaigns = forms.ModelMultipleChoiceField(queryset=Campaign.objects.all())
     datasources = forms.ModelMultipleChoiceField(queryset=Datasource.objects.all())
     date_start = forms.DateField(
-            widget = DatePickerInput(format=DATE_FORMAT)
+            widget = DatePickerInput(format=DATE_FORMAT),
+            input_formats = [DATE_FORMAT]
         )
     date_end = forms.DateField(
-            widget = DatePickerInput(format=DATE_FORMAT)
+            widget = DatePickerInput(format=DATE_FORMAT),
+            input_formats=[DATE_FORMAT]
         )
 

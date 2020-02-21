@@ -33,7 +33,7 @@
             $.post(
                 '{% url 'adverity_data_json' %}',
                 $('#parameters-form').serialize(),
-                function (data) {
+                function (rec_data) {
                   var ctx = $("#chart_metrics").get(0).getContext("2d");
                   if (metricsChart != null)
                   {
@@ -41,13 +41,11 @@
                   }
                   metricsChart = new Chart(ctx, {
                         type: 'line',
-                        data: data,
+                        data: rec_data,
                         options: {
                             responsive: false,
                         }
                 });
-
-                metricsChart.update();
            });
 
         }

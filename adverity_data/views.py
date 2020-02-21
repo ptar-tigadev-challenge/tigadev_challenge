@@ -93,10 +93,13 @@ class AdverityDataJSONView(BaseLineChartView):
             form = ParametersForm(self.request.POST)
             if form.is_valid():
                 self._date_start = form.cleaned_data['date_start']
+                print(form.cleaned_data['date_start'])
+
                 self._date_end = form.cleaned_data['date_end']
                 self._datasources = form.cleaned_data['datasources']
                 self._campaigns = form.cleaned_data['campaigns']
-
+            else:
+                print(form.errors)
         self.generate_date_range(self._date_start, self._date_end)
         self.prepare_datasets()
         context.update({"labels":self.get_labels(), 'datasets': self.get_datasets()})
