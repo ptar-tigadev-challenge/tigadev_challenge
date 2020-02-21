@@ -1,26 +1,32 @@
 from logging import getLogger
 from datetime import datetime
 from datetime import timedelta
+from datetime import date
 
 from django.views.generic import TemplateView
-from django.db.models import Max
 from django.db.models import Q
-from django.utils import timezone
 
 from chartjs.views.lines import BaseLineChartView
 from .models import Click
 from .models import Impression
 from .forms import ParametersForm
 
-DEFAULT_DATE_RANGE = 30
-DATE_FORMAT = '%d/%m/%Y'
+from .date_util import DEFAULT_DATE_RANGE
+from .date_util import DATE_FORMAT
+from .date_util import get_date_from_model
+
 class IndexView(TemplateView):
     template_name = 'index.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['form'] = ParametersForm()
+        form = ParametersForm()
+        dates = get_date_from_model(None, None)
+        form.fields['start_date'].initial = dates[0].date
+        form.fields['end_date'].initial =  dates[1].date
+        context['form'] = form
         return context
+
 
 class AdverityDataJSONView(BaseLineChartView):
     def __init__(self,**kwargs):
@@ -28,19 +34,11 @@ class AdverityDataJSONView(BaseLineChartView):
         self._datasources = kwargs.get('datasources', None)
         self._campaigns = kwargs.get('campaigns', None)
 
-        self._date_start = kwargs.get('date_start', None)
-        self._date_end = kwargs.get('date_end', None)
-        if not self._date_end:
-            max_impression_date = Impression.objects.all().aggregate(Max('rec_date'))['rec_date__max']
-            if not max_impression_date:
-                max_impression_date = timezone.make_aware(datetime.min)
-            max_click_date = Click.objects.all().aggregate(Max('rec_date'))['rec_date__max']
-            if not max_click_date:
-                max_click_date = timezone.make_aware(datetime.min)
+        self._date_start, self._date_end = get_date_from_model(
+                  kwargs.get('date_start', None),
+                  kwargs.get('date_end', None)
+            )
 
-            self._date_end = max(max_impression_date, max_click_date)
-        if not self._date_start:
-            self._date_start = self._date_end - timedelta(days = DEFAULT_DATE_RANGE)
         self._date_range = {}
         self._datasets = {}
 
@@ -60,11 +58,20 @@ class AdverityDataJSONView(BaseLineChartView):
             dict_ds_camp = self._datasets.setdefault((click.datasource_id, click.campaign_id),
                           {
                               'click': [None] * labels_cnt,
-                              'impression': [None] * labels_cnt
+                              'impression': [None] * labels_cnt,
                           }
                           )
             label_index = self._date_range[datetime.strftime(click.rec_date, DATE_FORMAT)]
             dict_ds_camp['click'][label_index] = click.amount
+        for impression in Impression.objects.filter(q_date_range):
+            dict_ds_camp = self._datasets.setdefault((impression.datasource_id, impression.campaign_id),
+                          {
+                              'click': [None] * labels_cnt,
+                              'impression': [None] * labels_cnt,
+                          }
+                          )
+            label_index = self._date_range[datetime.strftime(impression.rec_date, DATE_FORMAT)]
+            dict_ds_camp['impression'][label_index] = impression.amount
 
 
     def get_context_data(self, **kwargs):
@@ -81,12 +88,14 @@ class AdverityDataJSONView(BaseLineChartView):
         result = []
         for k in self._datasets:
             result.append(self._datasets[k]['click'])
+            result.append(self._datasets[k]['impression'])
         return result
 
     def get_providers(self):
         result = []
         for k in self._datasets:
-            result.append("{}:{}".format(k[0], k[1]))
+            result.append("{}:{}:{}".format(k[0], k[1], "click"))
+            result.append("{}:{}:{}".format(k[0], k[1], "impression"))
         return result
 
 index_view = IndexView.as_view()
