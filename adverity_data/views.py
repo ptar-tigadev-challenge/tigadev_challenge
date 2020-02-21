@@ -7,8 +7,13 @@ from django.views.generic import TemplateView
 from django.db.models import Q
 
 from chartjs.views.lines import BaseLineChartView
+from .models import Datasource
+from .models import Campaign
 from .models import Click
 from .models import Impression
+
+from .apps import AdverityDataConfig
+
 from .forms import ParametersForm
 
 from .date_util import DEFAULT_DATE_RANGE
@@ -43,10 +48,13 @@ class AdverityDataJSONView(BaseLineChartView):
                   kwargs.get('date_end', None)
             )
         self._datasources = None
-        self._campaigns = None
+        self._campaigns = Campaign.objects.filter(name__in=AdverityDataConfig.default_campaigns)
 
         self._date_range = {}
         self._datasets = {}
+        self._loaded_datasources = {}
+        self._loaded_campaigns = {}
+
     def post(self, request, *args, **kwargs):
         return self.get(request, args, kwargs)
 
@@ -59,6 +67,15 @@ class AdverityDataJSONView(BaseLineChartView):
             new_date = new_date + timedelta(days=1)
         self._labels = list(self._date_range.keys())
 
+    def cache_fk_data(self, cls, pk):
+        if cls == Datasource:
+            self._loaded_datasources.setdefault(pk,
+              cls.objects.get(id=pk)
+            )
+        if cls == Campaign:
+            self._loaded_campaigns.setdefault(pk,
+              cls.objects.get(id=pk)
+            )
     def prepare_datasets(self):
         labels_cnt = len(self._labels)
         query = Q(rec_date__range=(self._date_start, self._date_end))# & Q(campaign_id__exact=1030)
@@ -68,6 +85,8 @@ class AdverityDataJSONView(BaseLineChartView):
         if self._campaigns:
             query = query & Q(campaign__in=self._campaigns)
         for click in Click.objects.filter(query):
+            self.cache_fk_data(Datasource, click.datasource_id)
+            self.cache_fk_data(Campaign, click.campaign_id)
             dict_ds_camp = self._datasets.setdefault((click.datasource_id, click.campaign_id),
                           {
                               'click': [None] * labels_cnt,
@@ -77,6 +96,8 @@ class AdverityDataJSONView(BaseLineChartView):
             label_index = self._date_range[datetime.strftime(click.rec_date, DATE_FORMAT)]
             dict_ds_camp['click'][label_index] = click.amount
         for impression in Impression.objects.filter(query):
+            self.cache_fk_data(Datasource, impression.datasource_id)
+            self.cache_fk_data(Campaign, impression.campaign_id)
             dict_ds_camp = self._datasets.setdefault((impression.datasource_id, impression.campaign_id),
                           {
                               'click': [None] * labels_cnt,
@@ -118,8 +139,12 @@ class AdverityDataJSONView(BaseLineChartView):
     def get_providers(self):
         result = []
         for k in self._datasets:
-            result.append("{}:{}:{}".format(k[0], k[1], "click"))
-            result.append("{}:{}:{}".format(k[0], k[1], "impression"))
+            for metric_type in ['click', 'impression']:
+                result.append("{}:{}:{}".format(
+                    str(self._loaded_datasources.get(k[0], 'Unknown')),
+                    str(self._loaded_campaigns.get(k[1], 'Unknown')),
+                    metric_type)
+                    )
         return result
 
 index_view = IndexView.as_view()
