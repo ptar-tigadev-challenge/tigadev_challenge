@@ -4,6 +4,7 @@ from .models import Impression
 from django.db.models import Max
 from django.db.models import Q
 from django.utils import timezone
+from datetime import datetime
 from datetime import timedelta
 
 DEFAULT_DATE_RANGE = 30
