@@ -7,3 +7,4 @@ class AdverityDataConfig(AppConfig):
         'GDN RMKT - Prio 1 Offer',
         'Summer Offer 2019 - India'
         ]
+    """List of campaigns to narrow default search results"""
