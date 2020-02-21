@@ -32,7 +32,9 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     'adverity_data',
+    "bootstrap4",
     'chartjs',
+    'bootstrap_datepicker_plus',
     'crispy_forms',
     'django.contrib.admin',
     'django.contrib.auth',

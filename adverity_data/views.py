@@ -22,10 +22,14 @@ class IndexView(TemplateView):
         context = super().get_context_data(**kwargs)
         form = ParametersForm()
         dates = get_date_from_model(None, None)
-        form.fields['start_date'].initial = dates[0].date
-        form.fields['end_date'].initial =  dates[1].date
+        form.fields['date_start'].initial = dates[0].date
+        form.fields['date_end'].initial =  dates[1].date
         context['form'] = form
         return context
+
+def proceed_json_request(request):
+    view = AdverityDataJSONView()
+    return view
 
 
 class AdverityDataJSONView(BaseLineChartView):
@@ -38,9 +42,13 @@ class AdverityDataJSONView(BaseLineChartView):
                   kwargs.get('date_start', None),
                   kwargs.get('date_end', None)
             )
+        self._datasources = None
+        self._campaigns = None
 
         self._date_range = {}
         self._datasets = {}
+    def post(self, request, *args, **kwargs):
+        return self.get(request, args, kwargs)
 
     def generate_date_range(self, date_start, date_end):
         new_date = date_start
@@ -53,8 +61,13 @@ class AdverityDataJSONView(BaseLineChartView):
 
     def prepare_datasets(self):
         labels_cnt = len(self._labels)
-        q_date_range = Q(rec_date__range=(self._date_start, self._date_end))# & Q(campaign_id__exact=1030)
-        for click in Click.objects.filter(q_date_range):
+        query = Q(rec_date__range=(self._date_start, self._date_end))# & Q(campaign_id__exact=1030)
+
+        if self._datasources:
+            query = query & Q(datasource__in=self._datasources)
+        if self._campaigns:
+            query = query & Q(campaign__in=self._campaigns)
+        for click in Click.objects.filter(query):
             dict_ds_camp = self._datasets.setdefault((click.datasource_id, click.campaign_id),
                           {
                               'click': [None] * labels_cnt,
@@ -63,7 +76,7 @@ class AdverityDataJSONView(BaseLineChartView):
                           )
             label_index = self._date_range[datetime.strftime(click.rec_date, DATE_FORMAT)]
             dict_ds_camp['click'][label_index] = click.amount
-        for impression in Impression.objects.filter(q_date_range):
+        for impression in Impression.objects.filter(query):
             dict_ds_camp = self._datasets.setdefault((impression.datasource_id, impression.campaign_id),
                           {
                               'click': [None] * labels_cnt,
@@ -76,6 +89,14 @@ class AdverityDataJSONView(BaseLineChartView):
 
     def get_context_data(self, **kwargs):
         context = super(BaseLineChartView, self).get_context_data(**kwargs)
+        if self.request.method == 'POST':
+            form = ParametersForm(self.request.POST)
+            if form.is_valid():
+                self._date_start = form.cleaned_data['date_start']
+                self._date_end = form.cleaned_data['date_end']
+                self._datasources = form.cleaned_data['datasources']
+                self._campaigns = form.cleaned_data['campaigns']
+
         self.generate_date_range(self._date_start, self._date_end)
         self.prepare_datasets()
         context.update({"labels":self.get_labels(), 'datasets': self.get_datasets()})
